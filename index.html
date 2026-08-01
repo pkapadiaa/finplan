@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>finPlan — Home Loan Prepayment Planner</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="wrap">
+      <h1>finPlan</h1>
+      <p class="tagline">See how prepaying principal reshapes your loans — one loan or your whole portfolio.</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="controls">
+      <div class="strategy">
+        <span class="strategy-label">When you prepay, keep the</span>
+        <div class="segmented" role="tablist" aria-label="Prepayment strategy">
+          <button class="seg active" data-strategy="emi" role="tab">Tenure fixed → lower EMI</button>
+          <button class="seg" data-strategy="tenure" role="tab">EMI fixed → shorter tenure</button>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="addLoan" class="btn primary">+ Add loan</button>
+        <button id="resetAll" class="btn ghost">Reset</button>
+      </div>
+    </section>
+
+    <section id="loans" class="loans"></section>
+
+    <section id="summary" class="summary card">
+      <h2>Portfolio summary</h2>
+      <div id="summaryGrid" class="summary-grid"></div>
+      <div id="portfolioTable" class="table-wrap"></div>
+    </section>
+
+    <section id="assetsSection" class="assets-section card">
+      <div class="assets-head">
+        <h2>Assets &amp; monthly depletion</h2>
+        <button id="addAsset" class="btn icon">+ asset</button>
+      </div>
+      <p class="section-hint">Model your savings/investments drawing down as EMIs and upfront prepayments get paid. Growth &amp; monthly additions are optional.</p>
+      <div id="assetsList" class="assets-list"></div>
+
+      <div class="depletion-controls">
+        <div class="ctl">
+          <span class="ctl-label">Drawdown</span>
+          <div class="segmented" id="drawmode" role="tablist" aria-label="Drawdown order">
+            <button class="seg active" data-draw="proportional" role="tab">Proportional</button>
+            <button class="seg" data-draw="priority" role="tab">Priority order</button>
+          </div>
+        </div>
+        <div class="ctl">
+          <span class="ctl-label">View</span>
+          <div class="segmented" id="granularity" role="tablist" aria-label="Schedule granularity">
+            <button class="seg active" data-gran="month" role="tab">Monthly</button>
+            <button class="seg" data-gran="year" role="tab">Yearly</button>
+          </div>
+        </div>
+        <div id="depletionHeadline" class="depletion-headline"></div>
+      </div>
+
+      <div id="depletionChart" class="depletion-chart"></div>
+      <div id="depletionTable" class="table-wrap depletion-table"></div>
+    </section>
+  </main>
+
+  <footer class="wrap foot">
+    <p>All numbers stay in your browser (saved to localStorage). Nothing is uploaded. Interest is compounded monthly at ROI/12.</p>
+  </footer>
+
+  <template id="loanTemplate">
+    <article class="loan card" data-id="">
+      <div class="loan-head">
+        <input class="loan-name" type="text" placeholder="Loan name (e.g. Home Loan)" />
+        <button class="btn icon remove" title="Remove loan" aria-label="Remove loan">✕</button>
+      </div>
+
+      <div class="fields">
+        <label>Principal (original)
+          <input class="f-principal" type="number" min="0" step="1000" inputmode="decimal" />
+        </label>
+        <label>Annual ROI (%)
+          <input class="f-roi" type="number" min="0" step="0.01" inputmode="decimal" />
+        </label>
+        <label>Loan term
+          <div class="with-unit">
+            <input class="f-term" type="number" min="0" step="1" inputmode="decimal" />
+            <select class="f-term-unit">
+              <option value="years" selected>years</option>
+              <option value="months">months</option>
+            </select>
+          </div>
+        </label>
+        <label>Outstanding principal
+          <input class="f-outstanding" type="number" min="0" step="1000" inputmode="decimal" />
+        </label>
+        <label>Outstanding tenure
+          <div class="with-unit">
+            <input class="f-outtenure" type="number" min="0" step="1" inputmode="decimal" />
+            <select class="f-outtenure-unit">
+              <option value="months" selected>months</option>
+              <option value="years">years</option>
+            </select>
+          </div>
+        </label>
+      </div>
+
+      <div class="prepay-block">
+        <div class="prepay-head">
+          <span class="prepay-title">Prepayment options</span>
+          <button class="btn icon add-option" title="Add option">+ option</button>
+        </div>
+        <div class="prepay-options"></div>
+      </div>
+
+      <div class="loan-results"></div>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
