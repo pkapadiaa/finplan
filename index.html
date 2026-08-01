@@ -15,6 +15,21 @@
   </header>
 
   <main class="wrap">
+    <section class="plans-bar">
+      <div class="plans-left">
+        <label class="ctl-label" for="planSelect">Plan</label>
+        <select id="planSelect" title="Load a saved plan"></select>
+        <button id="planSave" class="btn small" title="Save the working copy into the selected plan">Save</button>
+        <button id="planSaveAs" class="btn small" title="Save the working copy as a new named plan">Save as…</button>
+        <button id="planDelete" class="btn small ghost" title="Delete the selected plan">Delete</button>
+      </div>
+      <div class="plans-right">
+        <button id="exportJson" class="btn small" title="Download your plan as a .json backup">Export .json</button>
+        <button id="importJson" class="btn small" title="Load a .json backup">Import .json</button>
+        <input id="importFile" type="file" accept="application/json,.json" hidden />
+      </div>
+    </section>
+
     <section class="controls">
       <div class="strategy">
         <span class="strategy-label">When you prepay, keep the</span>
@@ -25,6 +40,7 @@
       </div>
       <div class="actions">
         <button id="addLoan" class="btn primary">+ Add loan</button>
+        <button id="exportReport" class="btn">⭳ Export / Print</button>
         <button id="resetAll" class="btn ghost">Reset</button>
       </div>
     </section>

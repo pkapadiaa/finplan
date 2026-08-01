@@ -46,6 +46,17 @@ open finPlan/index.html
 
 - **Balance-curve chart** — an inline SVG of the assets balance over the whole
   schedule, with a dashed "runs dry" marker on the month assets are exhausted.
+- **Auto-save** — every edit is persisted to this browser's `localStorage`, so
+  your work is restored on the next visit (no button needed).
+- **Named plans** — save several scenarios by name (e.g. "Aggressive" vs
+  "Conservative") and switch between them from the dropdown in the plans bar.
+- **Backup / restore** — **Export .json** downloads your whole plan as a file
+  you can keep or move to another device/browser; **Import .json** loads it
+  back. This is the only copy that survives clearing browser data.
+- **Export / Print** — generates a clean, light-themed report (loans, option
+  comparisons, portfolio totals, assets, balance chart, yearly depletion) in a
+  new tab with a **Print / Save as PDF** button. If a pop-up blocker stops the
+  tab, it falls back to downloading the report as a standalone `.html` file.
 - **Drawdown order** — choose how EMIs pull from multiple assets:
   - **Proportional**: every asset shrinks by the same fraction each month.
   - **Priority order**: assets drain top-to-bottom (use the ▲▼ arrows to rank
