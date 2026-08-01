@@ -23,7 +23,7 @@ body {
   line-height: 1.5;
 }
 
-.wrap { width: min(1080px, 92vw); margin: 0 auto; }
+.wrap { width: min(1360px, 94vw); margin: 0 auto; }
 
 .app-header {
   padding: 36px 0 22px;
@@ -123,7 +123,12 @@ body {
 .btn.icon { padding: 6px 10px; }
 .btn.remove:hover { border-color: var(--danger); color: var(--danger); }
 
-.loans { display: grid; gap: 16px; }
+.loans {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 480px), 1fr));
+  align-items: start;
+}
 
 .loan-head { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
 .loan-name {
