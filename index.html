@@ -66,6 +66,22 @@
       <p class="section-hint">Model your savings/investments drawing down as EMIs and upfront prepayments get paid. Growth &amp; monthly additions are optional.</p>
       <div id="assetsList" class="assets-list"></div>
 
+      <div class="expenses-row">
+        <label>Probable monthly earnings
+          <input id="monthlyEarnings" type="number" min="0" step="1000" inputmode="decimal" placeholder="0" />
+        </label>
+        <label>Earnings growth (%/yr)
+          <input id="earningsGrowth" type="number" step="0.1" inputmode="decimal" placeholder="0" />
+        </label>
+        <label>Probable monthly expenses
+          <input id="monthlyExpenses" type="number" min="0" step="1000" inputmode="decimal" placeholder="0" />
+        </label>
+        <label>Expense inflation (%/yr)
+          <input id="expenseInflation" type="number" step="0.1" inputmode="decimal" placeholder="0" />
+        </label>
+        <p class="expenses-hint">Earnings (beyond asset contributions) are added to your assets each month; expenses, loan EMIs, and liability payments are drawn out. Both earnings and expenses can grow yearly.</p>
+      </div>
+
       <div class="depletion-controls">
         <div class="ctl">
           <span class="ctl-label">Drawdown</span>
@@ -96,6 +112,13 @@
       <p class="section-hint">Dues beyond your loans — credit-card balances, personal debt, pending payments. Add a monthly payment to spread it out, or leave it blank to treat the whole amount as due now. These are factored into the depletion schedule above.</p>
       <div id="liabilitiesList" class="assets-list"></div>
       <div id="liabilitiesSummary" class="summary-grid liab-summary"></div>
+    </section>
+
+    <section id="shortfallSection" class="assets-section card">
+      <h2>Pending payments after depletion</h2>
+      <p class="section-hint">Once your assets are exhausted, the remaining EMIs, liability payments, and expenses (net of earnings) can no longer be funded. This is what you'd need to cover from elsewhere.</p>
+      <div id="shortfallGrid" class="summary-grid"></div>
+      <div id="shortfallNote" class="depnote"></div>
     </section>
   </main>
 

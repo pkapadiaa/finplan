@@ -334,6 +334,36 @@ table.calc tfoot td { font-weight: 700; border-top: 2px solid var(--line); borde
 .netpos-bar h2 { margin: 0 0 14px; font-size: 18px; }
 .stat.netpos { border-color: var(--accent); background: rgba(79, 140, 255, 0.08); }
 .stat.netpos .v { font-size: 22px; }
+.stat.big .v { font-size: 22px; }
+.stat.big.bad { border-color: var(--danger); background: rgba(248, 113, 113, 0.08); }
+.expenses-row {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin: 4px 0 18px;
+}
+.expenses-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.expenses-row input {
+  width: 200px;
+  max-width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 15px;
+}
+.expenses-row input:focus { outline: none; border-color: var(--accent); }
+.expenses-hint { flex: 1 1 220px; margin: 0; color: var(--muted); font-size: 12px; align-self: center; }
+.depnote { margin: 10px 0 0; color: var(--muted); font-size: 12px; }
 .liab-summary { margin-top: 4px; }
 .depletion-chart { margin-bottom: 16px; }
 .depletion-chart svg { width: 100%; height: auto; display: block; }

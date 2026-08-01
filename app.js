@@ -63,6 +63,10 @@ let drawMode = "proportional"; // asset drawdown: "proportional" | "priority" (l
 let loans = [];
 let assets = [];
 let liabilities = [];
+let monthlyExpenses = ""; // probable living expenses per month
+let expenseInflation = ""; // annual % growth of those expenses
+let monthlyEarnings = ""; // probable income per month (beyond asset contributions)
+let earningsGrowth = ""; // annual % growth of those earnings
 // loan = { id, name, principal, roi, term, termUnit, outstanding, outTenure,
 //          outTenureUnit, options: [amount…], active: index }
 // asset = { id, name, balance, growth (annual %), contribution (monthly) }
@@ -93,7 +97,13 @@ function blankLiability() {
 }
 
 function save() {
-  localStorage.setItem(LS_KEY, JSON.stringify({ strategy, gran, drawMode, loans, assets, liabilities }));
+  localStorage.setItem(
+    LS_KEY,
+    JSON.stringify({
+      strategy, gran, drawMode, loans, assets, liabilities,
+      monthlyExpenses, expenseInflation, monthlyEarnings, earningsGrowth,
+    })
+  );
 }
 
 function load() {
@@ -111,6 +121,10 @@ function load() {
       drawMode = raw.drawMode === "priority" ? "priority" : "proportional";
       if (Array.isArray(raw.assets)) assets = raw.assets;
       if (Array.isArray(raw.liabilities)) liabilities = raw.liabilities;
+      if (raw.monthlyExpenses != null) monthlyExpenses = String(raw.monthlyExpenses);
+      if (raw.expenseInflation != null) expenseInflation = String(raw.expenseInflation);
+      if (raw.monthlyEarnings != null) monthlyEarnings = String(raw.monthlyEarnings);
+      if (raw.earningsGrowth != null) earningsGrowth = String(raw.earningsGrowth);
     }
   } catch (_) {}
   if (!loans.length) loans = [blankLoan()];
@@ -124,7 +138,12 @@ let currentPlan = null;
 
 // A deep copy of the current working state.
 function snapshot() {
-  return JSON.parse(JSON.stringify({ strategy, gran, drawMode, loans, assets, liabilities }));
+  return JSON.parse(
+    JSON.stringify({
+      strategy, gran, drawMode, loans, assets, liabilities,
+      monthlyExpenses, expenseInflation, monthlyEarnings, earningsGrowth,
+    })
+  );
 }
 
 // Normalise + load a state object into the working copy and re-render everything.
@@ -140,11 +159,27 @@ function applyState(st) {
   }));
   assets = Array.isArray(st.assets) ? st.assets : [];
   liabilities = Array.isArray(st.liabilities) ? st.liabilities : [];
+  monthlyExpenses = st.monthlyExpenses != null ? String(st.monthlyExpenses) : "";
+  expenseInflation = st.expenseInflation != null ? String(st.expenseInflation) : "";
+  monthlyEarnings = st.monthlyEarnings != null ? String(st.monthlyEarnings) : "";
+  earningsGrowth = st.earningsGrowth != null ? String(st.earningsGrowth) : "";
+  syncCashflowInputs();
   syncToggles();
   renderAssets();
   renderLiabilities();
   renderAll();
   save();
+}
+
+function syncCashflowInputs() {
+  const set = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.value = v ?? "";
+  };
+  set("monthlyExpenses", monthlyExpenses);
+  set("expenseInflation", expenseInflation);
+  set("monthlyEarnings", monthlyEarnings);
+  set("earningsGrowth", earningsGrowth);
 }
 
 function syncToggles() {
@@ -457,6 +492,7 @@ function renderSummary() {
   let totalOutstanding = 0,
     totalCurrentEMI = 0,
     totalPrepay = 0,
+    totalPostOutstanding = 0,
     totalNewEMI = 0,
     totalMonthlySaving = 0,
     totalInterestSaved = 0;
@@ -465,6 +501,7 @@ function renderSummary() {
     totalOutstanding += base.outstanding;
     totalCurrentEMI += base.currentEMI;
     totalPrepay += s ? s.prepay : 0;
+    totalPostOutstanding += s ? s.newOutstanding : base.outstanding;
     totalNewEMI += s ? s.newEMI : base.currentEMI;
     if (s && strategy === "emi") totalMonthlySaving += s.monthlySaving;
     totalInterestSaved += s ? s.interestSaved : 0;
@@ -488,22 +525,23 @@ function renderSummary() {
   // per-loan portfolio table (active option for each loan)
   const emiMode = strategy === "emi";
   const head = emiMode
-    ? `<tr><th>Loan</th><th>Outstanding</th><th>Current EMI</th><th>Prepay (active)</th><th>New EMI</th><th>Monthly saving</th><th>Interest saved</th></tr>`
-    : `<tr><th>Loan</th><th>Outstanding</th><th>Current EMI</th><th>Prepay (active)</th><th>New tenure</th><th>Months saved</th><th>Interest saved</th></tr>`;
+    ? `<tr><th>Loan</th><th>Outstanding</th><th>Current EMI</th><th>Prepay (active)</th><th>Outstanding after prepay</th><th>New EMI</th><th>Monthly saving</th><th>Interest saved</th></tr>`
+    : `<tr><th>Loan</th><th>Outstanding</th><th>Current EMI</th><th>Prepay (active)</th><th>Outstanding after prepay</th><th>New tenure</th><th>Months saved</th><th>Interest saved</th></tr>`;
 
   let body = "";
   rows.forEach(({ l, base, s }, idx) => {
     const name = (l.name && l.name.trim()) || `Loan ${idx + 1}`;
+    const postOut = money(s ? s.newOutstanding : base.outstanding);
     if (emiMode) {
-      body += `<tr><td>${name}</td><td>${money(base.outstanding)}</td><td>${money(base.currentEMI)}</td><td>${s ? money(s.prepay) : "—"}</td><td>${s ? money(s.newEMI) : "—"}</td><td class="good">${s ? money(s.monthlySaving) : "—"}</td><td class="good">${s ? money(s.interestSaved) : "—"}</td></tr>`;
+      body += `<tr><td>${name}</td><td>${money(base.outstanding)}</td><td>${money(base.currentEMI)}</td><td>${s ? money(s.prepay) : "—"}</td><td>${postOut}</td><td>${s ? money(s.newEMI) : "—"}</td><td class="good">${s ? money(s.monthlySaving) : "—"}</td><td class="good">${s ? money(s.interestSaved) : "—"}</td></tr>`;
     } else {
-      body += `<tr><td>${name}</td><td>${money(base.outstanding)}</td><td>${money(base.currentEMI)}</td><td>${s ? money(s.prepay) : "—"}</td><td class="good">${s ? monthsLabel(s.newTenureM) : "—"}</td><td class="good">${s ? monthsLabel(s.monthsSaved) : "—"}</td><td class="good">${s ? money(s.interestSaved) : "—"}</td></tr>`;
+      body += `<tr><td>${name}</td><td>${money(base.outstanding)}</td><td>${money(base.currentEMI)}</td><td>${s ? money(s.prepay) : "—"}</td><td>${postOut}</td><td class="good">${s ? monthsLabel(s.newTenureM) : "—"}</td><td class="good">${s ? monthsLabel(s.monthsSaved) : "—"}</td><td class="good">${s ? money(s.interestSaved) : "—"}</td></tr>`;
     }
   });
 
   const foot = emiMode
-    ? `<tr><td>Total</td><td>${money(totalOutstanding)}</td><td>${money(totalCurrentEMI)}</td><td>${money(totalPrepay)}</td><td>${money(totalNewEMI)}</td><td>${money(totalMonthlySaving)}</td><td>${money(totalInterestSaved)}</td></tr>`
-    : `<tr><td>Total</td><td>${money(totalOutstanding)}</td><td>${money(totalCurrentEMI)}</td><td>${money(totalPrepay)}</td><td>—</td><td>—</td><td>${money(totalInterestSaved)}</td></tr>`;
+    ? `<tr><td>Total</td><td>${money(totalOutstanding)}</td><td>${money(totalCurrentEMI)}</td><td>${money(totalPrepay)}</td><td>${money(totalPostOutstanding)}</td><td>${money(totalNewEMI)}</td><td>${money(totalMonthlySaving)}</td><td>${money(totalInterestSaved)}</td></tr>`
+    : `<tr><td>Total</td><td>${money(totalOutstanding)}</td><td>${money(totalCurrentEMI)}</td><td>${money(totalPrepay)}</td><td>${money(totalPostOutstanding)}</td><td>—</td><td>—</td><td>${money(totalInterestSaved)}</td></tr>`;
 
   tableWrap.innerHTML =
     `<div class="tbl-title">Per-loan breakdown (active option)</div>` +
@@ -707,12 +745,17 @@ function buildSchedule() {
     }
   });
   const { streams: liabStreams, lump: liabLump } = liabilityStreams();
-  if (!streams.length && !liabStreams.length && liabLump <= 0) return null;
+  const expenses = Math.max(0, parseFloat(monthlyExpenses) || 0);
+  const expInflM = (parseFloat(expenseInflation) || 0) / 100 / 12;
+  const income = Math.max(0, parseFloat(monthlyEarnings) || 0);
+  const incGrowM = (parseFloat(earningsGrowth) || 0) / 100 / 12;
+  if (!streams.length && !liabStreams.length && liabLump <= 0 && expenses <= 0 && income <= 0) return null;
 
-  const finiteMonths = streams
+  const horizon = streams
     .map((s) => (isFinite(s.months) ? s.months : 0))
     .concat(liabStreams.map((s) => s.months));
-  const maxMonths = Math.min(600, Math.max(1, ...finiteMonths));
+  // With no loan/liability horizon, cash-flow-only projections run for 30 years.
+  const maxMonths = horizon.length ? Math.min(600, Math.max(1, ...horizon)) : expenses > 0 || income > 0 ? 360 : 1;
   const prepayTotal = streams.reduce((a, s) => a + (s.prepay || 0), 0);
   const upfrontTotal = prepayTotal + liabLump;
 
@@ -721,7 +764,9 @@ function buildSchedule() {
     g: (parseFloat(a.growth) || 0) / 100 / 12,
     c: Math.max(0, parseFloat(a.contribution) || 0),
   }));
-  const hasAssets = bal.some((x) => x.b > 0 || x.c > 0);
+  // With income but no assets, add a plain cash bucket to hold accumulating earnings.
+  if (income > 0 && bal.length === 0) bal.push({ b: 0, g: 0, c: 0 });
+  const hasAssets = bal.some((x) => x.b > 0 || x.c > 0) || income > 0;
 
   const sum = () => bal.reduce((t, x) => t + x.b, 0);
   const startBalance = sum();
@@ -753,10 +798,12 @@ function buildSchedule() {
   const outflow = drawMode === "priority" ? outflowPriority : outflowProportional;
 
   let depletedMonth = null;
+  let totalShortfall = 0, monthsInDeficit = 0, lastShort = 0;
   const rows = [];
 
   // Month 0 — upfront amounts (loan prepayments + one-time dues) leave the pool now.
   const short0 = outflow(upfrontTotal);
+  if (short0 > 0) totalShortfall += short0;
   if (hasAssets && upfrontTotal > 0) {
     if (short0 > 0) depletedMonth = 0;
     rows.push({ m: 0, upfront: upfrontTotal, payment: 0, inflow: 0, remaining: sum(), depleted: short0 > 0 });
@@ -765,18 +812,31 @@ function buildSchedule() {
   for (let m = 1; m <= maxMonths; m++) {
     const before = sum();
     bal.forEach((x) => (x.b = x.b * (1 + x.g) + x.c));
+    // Monthly earnings land in the top bucket (spent first before other assets).
+    const incThis = income > 0 ? income * Math.pow(1 + incGrowM, m - 1) : 0;
+    if (incThis > 0 && bal.length) bal[0].b += incThis;
     const inflow = sum() - before;
 
+    const expThis = expenses > 0 ? expenses * Math.pow(1 + expInflM, m - 1) : 0;
     const payment =
       streams.reduce((t, s) => t + (m <= s.months ? s.emi : 0), 0) +
-      liabStreams.reduce((t, s) => t + (m <= s.months ? s.pay : 0), 0);
+      liabStreams.reduce((t, s) => t + (m <= s.months ? s.pay : 0), 0) +
+      expThis;
     const short = outflow(payment);
     if (short > 0 && depletedMonth === null) depletedMonth = m;
+    if (short > 0) {
+      totalShortfall += short;
+      monthsInDeficit++;
+    }
+    lastShort = short;
 
     rows.push({ m, upfront: 0, payment, inflow, remaining: sum(), depleted: short > 0 });
   }
 
-  return { rows, maxMonths, prepayTotal, upfrontTotal, hasAssets, depletedMonth, startBalance, finalRemaining: sum() };
+  return {
+    rows, maxMonths, prepayTotal, upfrontTotal, hasAssets, depletedMonth,
+    startBalance, finalRemaining: sum(), totalShortfall, monthsInDeficit, lastShort,
+  };
 }
 
 // Inline SVG line chart of the assets balance over the schedule.
@@ -872,6 +932,36 @@ function renderNetPosition() {
     `<div class="stat netpos ${t.net >= 0 ? "good" : "bad"}"><div class="k">Net position</div><div class="v">${money(t.net)}</div></div>`;
 }
 
+function renderShortfall(sched) {
+  const sec = document.getElementById("shortfallSection");
+  const grid = document.getElementById("shortfallGrid");
+  const note = document.getElementById("shortfallNote");
+
+  // "After depletion" only makes sense when there is an asset pool to deplete.
+  if (!sched || !sched.hasAssets) {
+    sec.style.display = "none";
+    return;
+  }
+  sec.style.display = "";
+
+  const hasIncome = (parseFloat(monthlyEarnings) || 0) > 0;
+  if (sched.depletedMonth === null) {
+    grid.innerHTML =
+      statBlock("Status", "Fully funded", "good") +
+      statBlock("Assets at end of schedule", money(sched.finalRemaining), "good") +
+      statBlock("Pending payments", money(0), "good");
+    note.innerHTML = `Your assets${hasIncome ? " and earnings" : ""} cover every scheduled payment across the ${monthsLabel(sched.maxMonths)} horizon — nothing is left unfunded.`;
+    return;
+  }
+
+  grid.innerHTML =
+    statBlock("Assets deplete", `${monthsLabel(sched.depletedMonth)} (m${sched.depletedMonth})`, "hi") +
+    `<div class="stat big bad"><div class="k">Pending payments (unfunded)</div><div class="v">${money(sched.totalShortfall)}</div></div>` +
+    statBlock("Months in deficit", String(sched.monthsInDeficit)) +
+    statBlock(`Monthly gap by m${sched.maxMonths}`, money(sched.lastShort), "bad");
+  note.innerHTML = `From month ${sched.depletedMonth} onward, your assets${hasIncome ? " and monthly earnings" : ""} can't fully cover the outflow. Over the rest of the schedule you'd need <b>${money(sched.totalShortfall)}</b> from elsewhere (fresh income, borrowing, or selling other assets) to stay on plan.`;
+}
+
 function renderDepletion() {
   renderNetPosition();
   const headEl = document.getElementById("depletionHeadline");
@@ -881,9 +971,10 @@ function renderDepletion() {
 
   if (!sched) {
     headEl.className = "depletion-headline";
-    headEl.innerHTML = `Add a loan or liability above to project an outflow/depletion schedule.`;
+    headEl.innerHTML = `Add a loan, liability, or monthly cash flow above to project a depletion schedule.`;
     tableEl.innerHTML = "";
     chartEl.innerHTML = "";
+    renderShortfall(null);
     return;
   }
 
@@ -953,7 +1044,17 @@ function renderDepletion() {
     });
   }
 
-  tableEl.innerHTML = `<table class="calc"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  const exp = parseFloat(monthlyExpenses) || 0;
+  const infl = parseFloat(expenseInflation) || 0;
+  const inc = parseFloat(monthlyEarnings) || 0;
+  const incG = parseFloat(earningsGrowth) || 0;
+  const notes = [];
+  if (inc > 0) notes.push(`<b>${money(inc)}</b>/mo earnings${incG ? ` growing ${incG}%/yr` : ""} added to assets`);
+  if (exp > 0) notes.push(`<b>${money(exp)}</b>/mo living expenses${infl ? ` growing ${infl}%/yr` : ""} in the outflow`);
+  const cashNote = notes.length ? `<p class="depnote">Includes ${notes.join("; ")}.</p>` : "";
+  tableEl.innerHTML = `<table class="calc"><thead>${head}</thead><tbody>${body}</tbody></table>${cashNote}`;
+
+  renderShortfall(sched);
 }
 
 /* ---------- export / print report ---------- */
@@ -1017,29 +1118,31 @@ function buildReportHTML() {
   });
 
   // ----- portfolio totals -----
-  let tOut = 0, tCur = 0, tPre = 0, tNew = 0, tSave = 0, tInt = 0;
+  let tOut = 0, tCur = 0, tPre = 0, tPost = 0, tNew = 0, tSave = 0, tInt = 0;
   rows.forEach(({ base, s }) => {
     tOut += base.outstanding;
     tCur += base.currentEMI;
     tPre += s ? s.prepay : 0;
+    tPost += s ? s.newOutstanding : base.outstanding;
     tNew += s ? s.newEMI : base.currentEMI;
     if (s && emiMode) tSave += s.monthlySaving;
     tInt += s ? s.interestSaved : 0;
   });
 
   const pHead = emiMode
-    ? `<tr><th>Loan</th><th>Outstanding</th><th>Current EMI</th><th>Prepay</th><th>New EMI</th><th>Monthly saving</th><th>Interest saved</th></tr>`
-    : `<tr><th>Loan</th><th>Outstanding</th><th>Current EMI</th><th>Prepay</th><th>New tenure</th><th>Months saved</th><th>Interest saved</th></tr>`;
+    ? `<tr><th>Loan</th><th>Outstanding</th><th>Current EMI</th><th>Prepay</th><th>Outstanding after prepay</th><th>New EMI</th><th>Monthly saving</th><th>Interest saved</th></tr>`
+    : `<tr><th>Loan</th><th>Outstanding</th><th>Current EMI</th><th>Prepay</th><th>Outstanding after prepay</th><th>New tenure</th><th>Months saved</th><th>Interest saved</th></tr>`;
   let pBody = "";
   rows.forEach(({ l, i, base, s }) => {
     const name = (l.name && l.name.trim()) || `Loan ${i + 1}`;
+    const postOut = money(s ? s.newOutstanding : base.outstanding);
     pBody += emiMode
-      ? `<tr><td>${esc(name)}</td><td>${money(base.outstanding)}</td><td>${money(base.currentEMI)}</td><td>${s ? money(s.prepay) : "—"}</td><td>${s ? money(s.newEMI) : "—"}</td><td>${s ? money(s.monthlySaving) : "—"}</td><td>${s ? money(s.interestSaved) : "—"}</td></tr>`
-      : `<tr><td>${esc(name)}</td><td>${money(base.outstanding)}</td><td>${money(base.currentEMI)}</td><td>${s ? money(s.prepay) : "—"}</td><td>${s ? monthsLabel(s.newTenureM) : "—"}</td><td>${s ? monthsLabel(s.monthsSaved) : "—"}</td><td>${s ? money(s.interestSaved) : "—"}</td></tr>`;
+      ? `<tr><td>${esc(name)}</td><td>${money(base.outstanding)}</td><td>${money(base.currentEMI)}</td><td>${s ? money(s.prepay) : "—"}</td><td>${postOut}</td><td>${s ? money(s.newEMI) : "—"}</td><td>${s ? money(s.monthlySaving) : "—"}</td><td>${s ? money(s.interestSaved) : "—"}</td></tr>`
+      : `<tr><td>${esc(name)}</td><td>${money(base.outstanding)}</td><td>${money(base.currentEMI)}</td><td>${s ? money(s.prepay) : "—"}</td><td>${postOut}</td><td>${s ? monthsLabel(s.newTenureM) : "—"}</td><td>${s ? monthsLabel(s.monthsSaved) : "—"}</td><td>${s ? money(s.interestSaved) : "—"}</td></tr>`;
   });
   const pFoot = emiMode
-    ? `<tr><td>Total</td><td>${money(tOut)}</td><td>${money(tCur)}</td><td>${money(tPre)}</td><td>${money(tNew)}</td><td>${money(tSave)}</td><td>${money(tInt)}</td></tr>`
-    : `<tr><td>Total</td><td>${money(tOut)}</td><td>${money(tCur)}</td><td>${money(tPre)}</td><td>—</td><td>—</td><td>${money(tInt)}</td></tr>`;
+    ? `<tr><td>Total</td><td>${money(tOut)}</td><td>${money(tCur)}</td><td>${money(tPre)}</td><td>${money(tPost)}</td><td>${money(tNew)}</td><td>${money(tSave)}</td><td>${money(tInt)}</td></tr>`
+    : `<tr><td>Total</td><td>${money(tOut)}</td><td>${money(tCur)}</td><td>${money(tPre)}</td><td>${money(tPost)}</td><td>—</td><td>—</td><td>${money(tInt)}</td></tr>`;
 
   const portfolioSection = rows.length
     ? `<h2>Portfolio</h2><table class="rpt"><thead>${pHead}</thead><tbody>${pBody}</tbody><tfoot>${pFoot}</tfoot></table>`
@@ -1104,13 +1207,25 @@ function buildReportHTML() {
     });
     const verdict =
       sched.depletedMonth !== null
-        ? `<p class="verdict warn">Assets run dry in ${monthsLabel(sched.depletedMonth)} (month ${sched.depletedMonth}).</p>`
+        ? `<p class="verdict warn">Assets run dry in ${monthsLabel(sched.depletedMonth)} (month ${sched.depletedMonth}). Pending payments left unfunded afterwards: ${money(sched.totalShortfall)}.</p>`
         : `<p class="verdict ok">Assets outlast the schedule — ${money(sched.finalRemaining)} left after ${monthsLabel(sched.maxMonths)}.</p>`;
     assetsSection +=
       `<h2>Asset depletion</h2>${verdict}` +
       `<div class="chart">${chart}</div>` +
       `<table class="rpt"><thead><tr><th>Year</th><th>Outflow</th><th>Assets in</th><th>Assets left</th></tr></thead><tbody>${yBody}</tbody></table>` +
-      `<p class="muted">Yearly summary; the chart shows the month-by-month balance.</p>`;
+      `<p class="muted">Yearly summary; the chart shows the month-by-month balance.${
+        (parseFloat(monthlyEarnings) || 0) > 0
+          ? ` Includes ${money(parseFloat(monthlyEarnings))}/mo earnings${
+              (parseFloat(earningsGrowth) || 0) ? ` growing ${parseFloat(earningsGrowth)}%/yr` : ""
+            }.`
+          : ""
+      }${
+        (parseFloat(monthlyExpenses) || 0) > 0
+          ? ` Outflow includes ${money(parseFloat(monthlyExpenses))}/mo living expenses${
+              (parseFloat(expenseInflation) || 0) ? ` growing ${parseFloat(expenseInflation)}%/yr` : ""
+            }.`
+          : ""
+      }</p>`;
   }
 
   const styles = `
@@ -1316,6 +1431,27 @@ document.getElementById("addLiability").addEventListener("click", () => {
   save();
 });
 
+document.getElementById("monthlyExpenses").addEventListener("input", (e) => {
+  monthlyExpenses = e.target.value;
+  renderDepletion();
+  save();
+});
+document.getElementById("expenseInflation").addEventListener("input", (e) => {
+  expenseInflation = e.target.value;
+  renderDepletion();
+  save();
+});
+document.getElementById("monthlyEarnings").addEventListener("input", (e) => {
+  monthlyEarnings = e.target.value;
+  renderDepletion();
+  save();
+});
+document.getElementById("earningsGrowth").addEventListener("input", (e) => {
+  earningsGrowth = e.target.value;
+  renderDepletion();
+  save();
+});
+
 document.querySelectorAll("#granularity .seg[data-gran]").forEach((b) =>
   b.addEventListener("click", () => {
     gran = b.dataset.gran;
@@ -1350,6 +1486,7 @@ document
   .forEach((x) => x.classList.toggle("active", x.dataset.draw === drawMode));
 loadPlans();
 refreshPlanSelect();
+syncCashflowInputs();
 renderAssets();
 renderLiabilities();
 renderAll();
