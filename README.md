@@ -46,6 +46,11 @@ open finPlan/index.html
 
 - **Balance-curve chart** — an inline SVG of the assets balance over the whole
   schedule, with a dashed "runs dry" marker on the month assets are exhausted.
+- **Net position** — a top-of-page overview: Assets − Loan outstanding −
+  Liabilities, colored green/red, updating live as you edit anything.
+- **Pending liabilities** — track dues outside your loans (credit cards,
+  personal debt). Give a monthly payment to spread it out, or leave it blank to
+  treat it as due now; both feed the depletion schedule.
 - **Auto-save** — every edit is persisted to this browser's `localStorage`, so
   your work is restored on the next visit (no button needed).
 - **Named plans** — save several scenarios by name (e.g. "Aggressive" vs

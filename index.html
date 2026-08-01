@@ -30,6 +30,11 @@
       </div>
     </section>
 
+    <section id="netPositionBar" class="netpos-bar card">
+      <h2>Net position</h2>
+      <div id="netPositionGrid" class="summary-grid"></div>
+    </section>
+
     <section class="controls">
       <div class="strategy">
         <span class="strategy-label">When you prepay, keep the</span>
@@ -81,6 +86,16 @@
 
       <div id="depletionChart" class="depletion-chart"></div>
       <div id="depletionTable" class="table-wrap depletion-table"></div>
+    </section>
+
+    <section id="liabilitiesSection" class="assets-section card">
+      <div class="assets-head">
+        <h2>Pending liabilities</h2>
+        <button id="addLiability" class="btn icon">+ liability</button>
+      </div>
+      <p class="section-hint">Dues beyond your loans — credit-card balances, personal debt, pending payments. Add a monthly payment to spread it out, or leave it blank to treat the whole amount as due now. These are factored into the depletion schedule above.</p>
+      <div id="liabilitiesList" class="assets-list"></div>
+      <div id="liabilitiesSummary" class="summary-grid liab-summary"></div>
     </section>
   </main>
 

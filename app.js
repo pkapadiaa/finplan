@@ -62,9 +62,11 @@ let gran = "month"; // depletion table granularity: "month" | "year"
 let drawMode = "proportional"; // asset drawdown: "proportional" | "priority" (list order)
 let loans = [];
 let assets = [];
+let liabilities = [];
 // loan = { id, name, principal, roi, term, termUnit, outstanding, outTenure,
 //          outTenureUnit, options: [amount…], active: index }
 // asset = { id, name, balance, growth (annual %), contribution (monthly) }
+// liability = { id, name, amount, payment (monthly, optional) }
 
 function blankLoan() {
   return {
@@ -86,8 +88,12 @@ function blankAsset() {
   return { id: crypto.randomUUID(), name: "", balance: "", growth: "", contribution: "" };
 }
 
+function blankLiability() {
+  return { id: crypto.randomUUID(), name: "", amount: "", payment: "" };
+}
+
 function save() {
-  localStorage.setItem(LS_KEY, JSON.stringify({ strategy, gran, drawMode, loans, assets }));
+  localStorage.setItem(LS_KEY, JSON.stringify({ strategy, gran, drawMode, loans, assets, liabilities }));
 }
 
 function load() {
@@ -104,6 +110,7 @@ function load() {
       gran = raw.gran === "year" ? "year" : "month";
       drawMode = raw.drawMode === "priority" ? "priority" : "proportional";
       if (Array.isArray(raw.assets)) assets = raw.assets;
+      if (Array.isArray(raw.liabilities)) liabilities = raw.liabilities;
     }
   } catch (_) {}
   if (!loans.length) loans = [blankLoan()];
@@ -117,7 +124,7 @@ let currentPlan = null;
 
 // A deep copy of the current working state.
 function snapshot() {
-  return JSON.parse(JSON.stringify({ strategy, gran, drawMode, loans, assets }));
+  return JSON.parse(JSON.stringify({ strategy, gran, drawMode, loans, assets, liabilities }));
 }
 
 // Normalise + load a state object into the working copy and re-render everything.
@@ -132,8 +139,10 @@ function applyState(st) {
     options: Array.isArray(l.options) && l.options.length ? l.options : ["", "", ""],
   }));
   assets = Array.isArray(st.assets) ? st.assets : [];
+  liabilities = Array.isArray(st.liabilities) ? st.liabilities : [];
   syncToggles();
   renderAssets();
+  renderLiabilities();
   renderAll();
   save();
 }
@@ -575,6 +584,111 @@ function renderAssets() {
   });
 }
 
+const liabilitiesListEl = document.getElementById("liabilitiesList");
+
+function renderLiabilities() {
+  liabilitiesListEl.innerHTML = "";
+  if (!liabilities.length) {
+    liabilitiesListEl.innerHTML = `<div class="empty">No liabilities. Click “+ liability” to track dues outside your loans.</div>`;
+  }
+  liabilities.forEach((li) => {
+    const card = document.createElement("div");
+    card.className = "asset";
+    card.innerHTML =
+      `<div class="asset-top">` +
+        `<input class="asset-name" type="text" placeholder="Liability (e.g. Credit card, Personal loan)" />` +
+        `<button class="asset-remove" title="Remove liability" aria-label="Remove liability">✕</button>` +
+      `</div>` +
+      `<div class="asset-fields">` +
+        `<label>Amount due<input class="l-amount" type="number" min="0" step="1000" inputmode="decimal" /></label>` +
+        `<label>Monthly payment (optional)<input class="l-payment" type="number" min="0" step="500" inputmode="decimal" placeholder="blank = due now" /></label>` +
+      `</div>` +
+      `<div class="asset-note muted"></div>`;
+
+    const nameEl = card.querySelector(".asset-name");
+    nameEl.value = li.name ?? "";
+    nameEl.addEventListener("input", () => {
+      li.name = nameEl.value;
+      save();
+    });
+    const bind = (sel, key) => {
+      const el = card.querySelector(sel);
+      el.value = li[key] ?? "";
+      el.addEventListener("input", () => {
+        li[key] = el.value;
+        updateLiabNote(card, li);
+        renderLiabSummary();
+        renderDepletion();
+        save();
+      });
+    };
+    bind(".l-amount", "amount");
+    bind(".l-payment", "payment");
+
+    card.querySelector(".asset-remove").addEventListener("click", () => {
+      liabilities = liabilities.filter((x) => x.id !== li.id);
+      renderLiabilities();
+      renderLiabSummary();
+      renderDepletion();
+      save();
+    });
+
+    updateLiabNote(card, li);
+    liabilitiesListEl.appendChild(card);
+  });
+  renderLiabSummary();
+}
+
+function updateLiabNote(card, li) {
+  const note = card.querySelector(".asset-note");
+  const amt = parseFloat(li.amount) || 0;
+  const pay = parseFloat(li.payment) || 0;
+  if (amt > 0 && pay > 0) {
+    note.textContent = `Cleared in ${monthsLabel(Math.ceil(amt / pay))} at ${money(pay)}/mo.`;
+  } else if (amt > 0) {
+    note.textContent = `Treated as due now (one-time).`;
+  } else {
+    note.textContent = "";
+  }
+}
+
+function renderLiabSummary() {
+  const el = document.getElementById("liabilitiesSummary");
+  const active = liabilities.filter((li) => (parseFloat(li.amount) || 0) > 0);
+  if (!active.length) {
+    el.innerHTML = "";
+    return;
+  }
+  let totalDue = 0, totalMonthly = 0, dueNow = 0;
+  active.forEach((li) => {
+    const amt = parseFloat(li.amount) || 0;
+    const pay = parseFloat(li.payment) || 0;
+    totalDue += amt;
+    if (pay > 0) totalMonthly += pay;
+    else dueNow += amt;
+  });
+  let cells = "";
+  cells += statBlock("Liabilities", String(active.length));
+  cells += statBlock("Total due", money(totalDue), "hi");
+  cells += statBlock("Monthly payments", money(totalMonthly));
+  cells += statBlock("Due now (lump)", dueNow > 0 ? money(dueNow) : "—", dueNow > 0 ? "hi" : "");
+  el.innerHTML = cells;
+}
+
+// Split liabilities into recurring monthly streams and one-time lump dues.
+function liabilityStreams() {
+  const streams = [];
+  let lump = 0;
+  liabilities.forEach((li) => {
+    const amt = Math.max(0, parseFloat(li.amount) || 0);
+    if (amt <= 0) return;
+    const pay = Math.max(0, parseFloat(li.payment) || 0);
+    if (pay > 0) streams.push({ pay, months: Math.ceil(amt / pay) });
+    else lump += amt;
+  });
+  return { streams, lump };
+}
+
 // Simulate assets drawing down month by month against every loan's active plan.
 function buildSchedule() {
   const streams = [];
@@ -592,11 +706,15 @@ function buildSchedule() {
       streams.push({ emi: base.currentEMI, months: Math.round(base.outTenureM), prepay: 0 });
     }
   });
-  if (!streams.length) return null;
+  const { streams: liabStreams, lump: liabLump } = liabilityStreams();
+  if (!streams.length && !liabStreams.length && liabLump <= 0) return null;
 
-  const finiteMonths = streams.map((s) => (isFinite(s.months) ? s.months : 0));
+  const finiteMonths = streams
+    .map((s) => (isFinite(s.months) ? s.months : 0))
+    .concat(liabStreams.map((s) => s.months));
   const maxMonths = Math.min(600, Math.max(1, ...finiteMonths));
   const prepayTotal = streams.reduce((a, s) => a + (s.prepay || 0), 0);
+  const upfrontTotal = prepayTotal + liabLump;
 
   const bal = assets.map((a) => ({
     b: Math.max(0, parseFloat(a.balance) || 0),
@@ -637,11 +755,11 @@ function buildSchedule() {
   let depletedMonth = null;
   const rows = [];
 
-  // Month 0 — upfront prepayment leaves the asset pool now.
-  const short0 = outflow(prepayTotal);
-  if (hasAssets && prepayTotal > 0) {
+  // Month 0 — upfront amounts (loan prepayments + one-time dues) leave the pool now.
+  const short0 = outflow(upfrontTotal);
+  if (hasAssets && upfrontTotal > 0) {
     if (short0 > 0) depletedMonth = 0;
-    rows.push({ m: 0, prepay: prepayTotal, payment: 0, inflow: 0, remaining: sum(), depleted: short0 > 0 });
+    rows.push({ m: 0, upfront: upfrontTotal, payment: 0, inflow: 0, remaining: sum(), depleted: short0 > 0 });
   }
 
   for (let m = 1; m <= maxMonths; m++) {
@@ -649,14 +767,16 @@ function buildSchedule() {
     bal.forEach((x) => (x.b = x.b * (1 + x.g) + x.c));
     const inflow = sum() - before;
 
-    const payment = streams.reduce((t, s) => t + (m <= s.months ? s.emi : 0), 0);
+    const payment =
+      streams.reduce((t, s) => t + (m <= s.months ? s.emi : 0), 0) +
+      liabStreams.reduce((t, s) => t + (m <= s.months ? s.pay : 0), 0);
     const short = outflow(payment);
     if (short > 0 && depletedMonth === null) depletedMonth = m;
 
-    rows.push({ m, prepay: 0, payment, inflow, remaining: sum(), depleted: short > 0 });
+    rows.push({ m, upfront: 0, payment, inflow, remaining: sum(), depleted: short > 0 });
   }
 
-  return { rows, maxMonths, prepayTotal, hasAssets, depletedMonth, startBalance, finalRemaining: sum() };
+  return { rows, maxMonths, prepayTotal, upfrontTotal, hasAssets, depletedMonth, startBalance, finalRemaining: sum() };
 }
 
 // Inline SVG line chart of the assets balance over the schedule.
@@ -721,7 +841,39 @@ function buildChartSVG(sched, theme) {
   );
 }
 
+// Overall position across loans, assets, and liabilities.
+function computeTotals() {
+  let ta = 0, tl = 0, tli = 0;
+  assets.forEach((a) => (ta += Math.max(0, parseFloat(a.balance) || 0)));
+  loans.forEach((l) => {
+    const o = parseFloat(l.outstanding);
+    if (isFinite(o) && o > 0) tl += o;
+  });
+  liabilities.forEach((li) => {
+    const a = parseFloat(li.amount);
+    if (isFinite(a) && a > 0) tli += a;
+  });
+  return { assets: ta, loans: tl, liabilities: tli, net: ta - tl - tli };
+}
+
+function renderNetPosition() {
+  const bar = document.getElementById("netPositionBar");
+  const grid = document.getElementById("netPositionGrid");
+  const t = computeTotals();
+  if (t.assets === 0 && t.loans === 0 && t.liabilities === 0) {
+    bar.style.display = "none";
+    return;
+  }
+  bar.style.display = "";
+  grid.innerHTML =
+    statBlock("Assets", money(t.assets), "good") +
+    statBlock("Loans outstanding", money(t.loans), "hi") +
+    statBlock("Liabilities", money(t.liabilities), "hi") +
+    `<div class="stat netpos ${t.net >= 0 ? "good" : "bad"}"><div class="k">Net position</div><div class="v">${money(t.net)}</div></div>`;
+}
+
 function renderDepletion() {
+  renderNetPosition();
   const headEl = document.getElementById("depletionHeadline");
   const tableEl = document.getElementById("depletionTable");
   const chartEl = document.getElementById("depletionChart");
@@ -729,7 +881,7 @@ function renderDepletion() {
 
   if (!sched) {
     headEl.className = "depletion-headline";
-    headEl.innerHTML = `Add a loan above to project a payment/depletion schedule.`;
+    headEl.innerHTML = `Add a loan or liability above to project an outflow/depletion schedule.`;
     tableEl.innerHTML = "";
     chartEl.innerHTML = "";
     return;
@@ -747,7 +899,7 @@ function renderDepletion() {
     headEl.className = "depletion-headline warn";
     headEl.innerHTML =
       sched.depletedMonth === 0
-        ? `⚠ The upfront prepayment (<b>${money(sched.prepayTotal)}</b>) exceeds your assets.`
+        ? `⚠ The upfront amount due now (<b>${money(sched.upfrontTotal)}</b>, prepayments + one-time dues) exceeds your assets.`
         : `⚠ Assets run dry in <b>${monthsLabel(sched.depletedMonth)}</b> (month ${sched.depletedMonth}).`;
   } else {
     headEl.className = "depletion-headline ok";
@@ -771,11 +923,11 @@ function renderDepletion() {
       years.set(y, acc);
     });
     head = showAssets
-      ? `<tr><th>Year</th><th>Payments</th><th>Assets in</th><th>Assets left</th></tr>`
-      : `<tr><th>Year</th><th>Payments</th></tr>`;
+      ? `<tr><th>Year</th><th>Outflow</th><th>Assets in</th><th>Assets left</th></tr>`
+      : `<tr><th>Year</th><th>Outflow</th></tr>`;
     body = "";
-    if (sched.prepayTotal > 0 && showAssets) {
-      body += `<tr class="prepay-row"><td>Now</td><td>${money(sched.prepayTotal)} prepay</td><td>—</td><td>${money(Math.max(0, sched.rows[0]?.remaining ?? 0))}</td></tr>`;
+    if (sched.upfrontTotal > 0 && showAssets) {
+      body += `<tr class="prepay-row"><td>Now</td><td>${money(sched.upfrontTotal)} upfront</td><td>—</td><td>${money(Math.max(0, sched.rows[0]?.remaining ?? 0))}</td></tr>`;
     }
     years.forEach((acc, y) => {
       const cls = acc.depleted ? " class=\"depleted\"" : "";
@@ -785,13 +937,13 @@ function renderDepletion() {
     });
   } else {
     head = showAssets
-      ? `<tr><th>Month</th><th>Loan payment</th><th>Assets in</th><th>Assets left</th></tr>`
-      : `<tr><th>Month</th><th>Loan payment</th></tr>`;
+      ? `<tr><th>Month</th><th>Outflow</th><th>Assets in</th><th>Assets left</th></tr>`
+      : `<tr><th>Month</th><th>Outflow</th></tr>`;
     body = "";
     sched.rows.forEach((r) => {
       if (r.m === 0) {
         if (showAssets)
-          body += `<tr class="prepay-row"><td>Now</td><td>${money(r.prepay)} prepay</td><td>—</td><td>${money(Math.max(0, r.remaining))}</td></tr>`;
+          body += `<tr class="prepay-row"><td>Now</td><td>${money(r.upfront)} upfront</td><td>—</td><td>${money(Math.max(0, r.remaining))}</td></tr>`;
         return;
       }
       const cls = r.depleted ? " class=\"depleted\"" : "";
@@ -907,6 +1059,26 @@ function buildReportHTML() {
       `<table class="rpt"><thead><tr><th>Asset</th><th>Balance</th><th>Growth p.a.</th><th>Monthly add</th></tr></thead><tbody>${alist}</tbody></table>`;
   }
 
+  // ----- pending liabilities -----
+  const liabActive = liabilities.filter((li) => (parseFloat(li.amount) || 0) > 0);
+  if (liabActive.length) {
+    let lTotal = 0, lMonthly = 0;
+    const lrows = liabActive
+      .map((li) => {
+        const amt = parseFloat(li.amount) || 0;
+        const pay = parseFloat(li.payment) || 0;
+        lTotal += amt;
+        if (pay > 0) lMonthly += pay;
+        const plan = pay > 0 ? `${money(pay)}/mo · ${monthsLabel(Math.ceil(amt / pay))}` : "due now";
+        return `<tr><td>${esc(li.name || "Liability")}</td><td>${money(amt)}</td><td>${plan}</td></tr>`;
+      })
+      .join("");
+    assetsSection +=
+      `<h2>Pending liabilities</h2>` +
+      `<table class="rpt"><thead><tr><th>Liability</th><th>Amount due</th><th>Repayment</th></tr></thead><tbody>${lrows}</tbody>` +
+      `<tfoot><tr><td>Total</td><td>${money(lTotal)}</td><td>${money(lMonthly)}/mo</td></tr></tfoot></table>`;
+  }
+
   if (sched && sched.hasAssets) {
     const chart = buildChartSVG(sched, {
       grid: "#e2e6ee", text: "#667085", line: "#0a7d54", fillA: 0.22, fillB: 0.02, id: "rptFill",
@@ -924,8 +1096,8 @@ function buildReportHTML() {
       years.set(y, acc);
     });
     let yBody = "";
-    if (sched.prepayTotal > 0) {
-      yBody += `<tr class="warn"><td>Now</td><td>${money(sched.prepayTotal)} prepay</td><td>—</td><td>${money(Math.max(0, sched.rows[0]?.remaining ?? 0))}</td></tr>`;
+    if (sched.upfrontTotal > 0) {
+      yBody += `<tr class="warn"><td>Now</td><td>${money(sched.upfrontTotal)} upfront</td><td>—</td><td>${money(Math.max(0, sched.rows[0]?.remaining ?? 0))}</td></tr>`;
     }
     years.forEach((acc, y) => {
       yBody += `<tr${acc.depleted ? ' class="warn"' : ""}><td>Year ${y}</td><td>${money(acc.payment)}</td><td>${money(acc.inflow)}</td><td>${money(Math.max(0, acc.remaining))}</td></tr>`;
@@ -937,7 +1109,7 @@ function buildReportHTML() {
     assetsSection +=
       `<h2>Asset depletion</h2>${verdict}` +
       `<div class="chart">${chart}</div>` +
-      `<table class="rpt"><thead><tr><th>Year</th><th>Payments</th><th>Assets in</th><th>Assets left</th></tr></thead><tbody>${yBody}</tbody></table>` +
+      `<table class="rpt"><thead><tr><th>Year</th><th>Outflow</th><th>Assets in</th><th>Assets left</th></tr></thead><tbody>${yBody}</tbody></table>` +
       `<p class="muted">Yearly summary; the chart shows the month-by-month balance.</p>`;
   }
 
@@ -982,6 +1154,11 @@ function buildReportHTML() {
     `<button onclick="window.close()">Close</button></div>` +
     `<h1>finPlan — Loan &amp; Asset Plan</h1>` +
     `<p class="sub">Generated ${dateStr} · Strategy: ${stratLabel}</p>` +
+    (() => {
+      const T = computeTotals();
+      if (!T.assets && !T.loans && !T.liabilities) return "";
+      return `<p class="sub">Net position: <b style="color:${T.net >= 0 ? "#0a7d54" : "#c0392b"}">${money(T.net)}</b> &nbsp;=&nbsp; Assets ${money(T.assets)} − Loans ${money(T.loans)} − Liabilities ${money(T.liabilities)}</p>`;
+    })() +
     `<h2>Loans</h2>${loanSections || '<p class="muted">No loans entered.</p>'}` +
     portfolioSection +
     assetsSection +
@@ -1132,6 +1309,13 @@ document.getElementById("addAsset").addEventListener("click", () => {
   save();
 });
 
+document.getElementById("addLiability").addEventListener("click", () => {
+  liabilities.push(blankLiability());
+  renderLiabilities();
+  renderDepletion();
+  save();
+});
+
 document.querySelectorAll("#granularity .seg[data-gran]").forEach((b) =>
   b.addEventListener("click", () => {
     gran = b.dataset.gran;
@@ -1167,4 +1351,5 @@ document
 loadPlans();
 refreshPlanSelect();
 renderAssets();
+renderLiabilities();
 renderAll();
